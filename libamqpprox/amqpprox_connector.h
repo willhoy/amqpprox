@@ -19,6 +19,7 @@
 #include <amqpprox_buffer.h>
 #include <amqpprox_bufferhandle.h>
 #include <amqpprox_flowtype.h>
+#include <amqpprox_logging.h>
 #include <amqpprox_method.h>
 #include <amqpprox_methods_close.h>
 #include <amqpprox_methods_closeok.h>
@@ -30,7 +31,10 @@
 #include <amqpprox_methods_tuneok.h>
 
 #include <functional>
+#include <optional>
+#include <regex>
 #include <string_view>
+#include <utility>
 
 namespace Bloomberg {
 namespace amqpprox {
@@ -95,6 +99,8 @@ class Connector {
     bool                  d_sendToIngressSide;
     bool                  d_reconnection;
     std::string           d_localHostname;
+
+    static const std::regex s_credentialsRegex;
 
     template <typename T>
     void sendResponse(const T &response, bool sendToIngressSide);
@@ -177,6 +183,16 @@ class Connector {
      * \return the current direction of the data flow (ingree/egress)
      */
     bool sendToIngressSide();
+
+    /**
+     * \brief AMQP client sends credential information using START-OK method.
+     * The method extracts the credential information from that method fields.
+     * So in case of absence or not abl to retrieve, it returns empty
+     * credentials.
+     * \return pair of (username, password)
+     */
+    const std::optional<std::pair<std::string, std::string>>
+    getCredentials() const;
 };
 
 inline Connector::State Connector::state() const

@@ -28,10 +28,15 @@
 #include <amqpprox_sessionstate.h>
 
 #include <iostream>
+#include <regex>
 #include <string_view>
 
 namespace Bloomberg {
 namespace amqpprox {
+
+// AMQP 0.9.1 credentials format: "\0username\0password"
+const std::regex Connector::s_credentialsRegex("^\\0.+\\0.+$",
+                                               std::regex::ECMAScript);
 
 namespace {
 
@@ -416,6 +421,34 @@ void Connector::synthesizeProxyProtocolHeader(
         Buffer(proxyProtocolHeader.data(), proxyProtocolHeader.size()));
 
     d_buffer = tempBuffer.currentData();
+}
+
+const std::optional<std::pair<std::string, std::string>>
+Connector::getCredentials() const
+{
+    if (d_startOk.response().empty()) {
+        return std::optional<std::pair<std::string, std::string>>();
+    }
+    if (d_startOk.mechanism() == Constants::authenticationMechanism()) {
+        if (std::regex_match(d_startOk.response(), s_credentialsRegex)) {
+            std::size_t leftMatch =
+                d_startOk.response().find(std::string("\0", 1));
+            std::size_t rightMatch =
+                d_startOk.response().rfind(std::string("\0", 1));
+            std::string user = d_startOk.response().substr(
+                leftMatch + 1, rightMatch - leftMatch - 1);
+            std::string pass = d_startOk.response().substr(rightMatch + 1);
+            return std::optional<std::pair<std::string, std::string>>(
+                std::in_place, user, pass);
+        }
+        else {
+            LOG_FATAL << "Received invalid formatted credentials from the "
+                         "client. auth mechanism: "
+                      << Constants::authenticationMechanism()
+                      << ", invalid credentials: " << d_startOk.response();
+        }
+    }
+    return std::optional<std::pair<std::string, std::string>>();
 }
 
 }

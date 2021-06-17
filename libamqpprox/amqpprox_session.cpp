@@ -15,6 +15,7 @@
 */
 #include <amqpprox_session.h>
 
+#include <amqpprox_authinterceptinterface.h>
 #include <amqpprox_backend.h>
 #include <amqpprox_bufferhandle.h>
 #include <amqpprox_bufferpool.h>
@@ -39,6 +40,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string_view>
+#include <utility>
 
 namespace Bloomberg {
 namespace amqpprox {
@@ -71,7 +73,8 @@ Session::Session(boost::asio::io_service &              ioservice,
                  BufferPool *                           bufferPool,
                  DNSResolver *                          dnsResolver,
                  const std::shared_ptr<HostnameMapper> &hostnameMapper,
-                 std::string_view                       localHostname)
+                 std::string_view                       localHostname,
+                 const std::shared_ptr<AuthInterceptInterface> &authIntercept)
 : d_ioService(ioservice)
 , d_serverSocket(std::move(serverSocket))
 , d_clientSocket(std::move(clientSocket))
@@ -96,6 +99,7 @@ Session::Session(boost::asio::io_service &              ioservice,
 , d_egressStartedAt()
 , d_resolvedEndpoints()
 , d_resolvedEndpointsIndex(0)
+, d_authIntercept(authIntercept)
 {
     boost::system::error_code ec;
     d_serverSocket.setDefaultOptions(ec);
@@ -403,6 +407,42 @@ void Session::establishConnection()
         return;
     }
 
+    auto self(shared_from_this());
+    auto authResponseCb = [this,
+                           self](const AuthInterceptInterface::Auth &isAllowed,
+                                 const std::string &                 reason) {
+        if (isAllowed == AuthInterceptInterface::Auth::DENY) {
+            LOG_ERROR << "Disconnecting unauthenticated/unauthorized client, "
+                         "reason: "
+                      << reason;
+            disconnect(true);
+            return;
+        }
+        else if (isAllowed == AuthInterceptInterface::Auth::ALLOW) {
+            LOG_TRACE << "Authenticated/Authorized client, reason: " << reason;
+        }
+        else {
+            LOG_FATAL << "Not able to authn/authz client. Disconnecting "
+                         "client. Invalid response values from auth gate "
+                         "service, isAllowed: "
+                      << static_cast<int>(isAllowed) << ", reason: " << reason;
+            disconnect(true);
+            return;
+        }
+    };
+    auto                                ret = d_connector.getCredentials();
+    std::pair<std::string, std::string> credentials;
+    if (!ret) {
+        credentials = std::make_pair("", "");
+    }
+    else {
+        credentials = ret.value();
+    }
+    std::string requestData =
+        "{\"vhost\": " + d_sessionState.getVirtualHost() +
+        ", \"user\": " + credentials.first +
+        ", \"pass\": " + credentials.second + "}";
+    d_authIntercept->sendRequest(requestData, authResponseCb);
     attemptConnection(connectionManager);
 }
 

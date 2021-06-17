@@ -16,6 +16,7 @@
 #ifndef BLOOMBERG_AMQPPROX_SERVER
 #define BLOOMBERG_AMQPPROX_SERVER
 
+#include <amqpprox_authinterceptinterface.h>
 #include <amqpprox_connectionselector.h>
 #include <amqpprox_dnsresolver.h>
 #include <amqpprox_maybesecuresocketadaptor.h>
@@ -58,6 +59,7 @@ class Server {
     std::mutex                      d_mutex;
     std::shared_ptr<HostnameMapper> d_hostnameMapper;
     std::string                     d_localHostname;
+    std::shared_ptr<AuthInterceptInterface> d_authIntercept;
 
   public:
     Server(ConnectionSelector *selector,
@@ -148,6 +150,9 @@ class Server {
      * \brief Return egress (client) TLS context
      */
     boost::asio::ssl::context &egressTlsContext();
+
+    boost::asio::io_service &ioService();
+    ///< Retrieve the io service for the server object
 
   private:
     void doAccept(int port, bool secure);
