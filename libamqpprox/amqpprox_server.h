@@ -151,8 +151,10 @@ class Server {
      */
     boost::asio::ssl::context &egressTlsContext();
 
+    /**
+     * \return the boost::asio io service object
+     */
     boost::asio::io_service &ioService();
-    ///< Retrieve the io service for the server object
 
   private:
     void doAccept(int port, bool secure);

@@ -120,7 +120,7 @@ class Session : public std::enable_shared_from_this<Session> {
     void disconnect(bool forcible);
 
     /**
-     * \brief Disconnect unauthorized client side session gracefully and close
+     * \brief Disconnect unauthorised client side session gracefully and close
      * the socket for server side session
      */
     void disconnectUnauthClientGracefully();

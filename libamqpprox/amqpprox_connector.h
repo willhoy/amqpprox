@@ -19,7 +19,6 @@
 #include <amqpprox_buffer.h>
 #include <amqpprox_bufferhandle.h>
 #include <amqpprox_flowtype.h>
-#include <amqpprox_logging.h>
 #include <amqpprox_method.h>
 #include <amqpprox_methods_close.h>
 #include <amqpprox_methods_closeok.h>
@@ -31,7 +30,6 @@
 #include <amqpprox_methods_tuneok.h>
 
 #include <functional>
-#include <regex>
 #include <string_view>
 #include <utility>
 
@@ -206,7 +204,7 @@ class Connector {
      * \param credentials data for AMQP response field
      */
     void setAuthMechanismCredentials(std::string_view authMechanism,
-                                     std::string_view credentials) const;
+                                     std::string_view credentials);
 };
 
 inline Connector::State Connector::state() const

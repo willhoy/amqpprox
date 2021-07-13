@@ -34,7 +34,6 @@
 #include <amqpprox_methods_startok.h>
 #include <amqpprox_packetprocessor.h>
 #include <amqpprox_proxyprotocolheaderv1.h>
-#include <amqpprox_reply.h>
 #include <amqpprox_tlsutil.h>
 
 #include <boost/system/error_code.hpp>

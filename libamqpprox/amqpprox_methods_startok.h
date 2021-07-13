@@ -65,21 +65,15 @@ class StartOk {
 
     /**
      * \brief Set specified AMQP authMechanism
-     * \param authMechanism AMQP authorization mechanism
+     * \param authMechanism AMQP authentication mechanism
      */
-    void setAuthMechanism(std::string_view authMechanism)
-    {
-        d_mechanism = authMechanism;
-    }
+    void setAuthMechanism(std::string_view authMechanism);
 
     /**
      * \brief Set specified AMQP response credentials
      * \param credentials AMQP opaque credential data
      */
-    void setCredentials(std::string_view credentials)
-    {
-        d_response = credentials;
-    }
+    void setCredentials(std::string_view credentials);
 };
 
 std::ostream &operator<<(std::ostream &os, const StartOk &okMethod);

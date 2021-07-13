@@ -28,7 +28,6 @@
 #include <amqpprox_sessionstate.h>
 
 #include <iostream>
-#include <regex>
 #include <string_view>
 
 namespace Bloomberg {
@@ -296,15 +295,11 @@ void Connector::synthesizeClose(bool sendToIngressSide)
 
 void Connector::synthesizeCloseError(bool sendToIngressSide)
 {
-    d_state = sendToIngressSide ? State::CLIENT_CLOSE_SENT
-                                : State::SERVER_CLOSE_SENT;
     synthesizeMessage<Reply::CloseOkExpected>(d_close, sendToIngressSide);
 }
 
 void Connector::synthesizeCloseAuthError(bool sendToIngressSide)
 {
-    d_state = sendToIngressSide ? State::CLIENT_CLOSE_SENT
-                                : State::SERVER_CLOSE_SENT;
     synthesizeMessage<Reply::CloseNoAuth>(d_close, sendToIngressSide);
 }
 
@@ -432,6 +427,13 @@ const std::pair<std::string_view, std::string_view>
 Connector::getAuthMechanismCredentials() const
 {
     return std::make_pair(d_startOk.mechanism(), d_startOk.response());
+}
+
+void Connector::setAuthMechanismCredentials(std::string_view authMechanism,
+                                            std::string_view credentials)
+{
+    d_startOk.setAuthMechanism(authMechanism);
+    d_startOk.setCredentials(credentials);
 }
 
 }

@@ -39,6 +39,16 @@ bool StartOk::encode(Buffer &buffer, const StartOk &startOk)
            Types::encodeShortString(buffer, startOk.d_locale);
 }
 
+void StartOk::setAuthMechanism(std::string_view authMechanism)
+{
+    d_mechanism = authMechanism;
+}
+
+void StartOk::setCredentials(std::string_view credentials)
+{
+    d_response = credentials;
+}
+
 std::ostream &operator<<(std::ostream &os, const StartOk &okMethod)
 {
     os << "StartOk = [properties:" << okMethod.properties()
