@@ -114,10 +114,16 @@ class Session : public std::enable_shared_from_this<Session> {
     void pause();
 
     /**
-     * \brief Disconnect both sides of the session
+     * \brief Disconnect both sides of the sessions
      * \param forcible to specify forcefully disconnect
      */
     void disconnect(bool forcible);
+
+    /**
+     * \brief Disconnect unauthorized client side session gracefully and close
+     * the socket for server side session
+     */
+    void disconnectUnauthClientGracefully();
 
     /**
      * \brief Disconnect the session from the backend, but leave the client

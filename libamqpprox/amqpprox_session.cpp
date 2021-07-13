@@ -16,6 +16,8 @@
 #include <amqpprox_session.h>
 
 #include <amqpprox_authinterceptinterface.h>
+#include <amqpprox_authrequestdata.h>
+#include <amqpprox_authresponsedata.h>
 #include <amqpprox_backend.h>
 #include <amqpprox_bufferhandle.h>
 #include <amqpprox_bufferpool.h>
@@ -32,6 +34,7 @@
 #include <amqpprox_methods_startok.h>
 #include <amqpprox_packetprocessor.h>
 #include <amqpprox_proxyprotocolheaderv1.h>
+#include <amqpprox_reply.h>
 #include <amqpprox_tlsutil.h>
 
 #include <boost/system/error_code.hpp>
@@ -409,40 +412,44 @@ void Session::establishConnection()
 
     auto self(shared_from_this());
     auto authResponseCb = [this,
-                           self](const AuthInterceptInterface::Auth &isAllowed,
-                                 const std::string &                 reason) {
-        if (isAllowed == AuthInterceptInterface::Auth::DENY) {
+                           self](const AuthResponseData &authResponseData) {
+        if (authResponseData.getAuthResult() ==
+            AuthResponseData::AuthResult::DENY) {
             LOG_ERROR << "Disconnecting unauthenticated/unauthorized client, "
                          "reason: "
-                      << reason;
-            disconnect(true);
+                      << authResponseData.getReason();
+            disconnectUnauthClientGracefully();
             return;
         }
-        else if (isAllowed == AuthInterceptInterface::Auth::ALLOW) {
-            LOG_TRACE << "Authenticated/Authorized client, reason: " << reason;
+        else if (authResponseData.getAuthResult() ==
+                 AuthResponseData::AuthResult::ALLOW) {
+            LOG_TRACE << "Authenticated/Authorized client, reason: "
+                      << authResponseData.getReason();
+            if (!authResponseData.getAuthMechanism().empty() &&
+                !authResponseData.getCredentials().empty()) {
+                d_connector.setAuthMechanismCredentials(
+                    authResponseData.getAuthMechanism(),
+                    authResponseData.getCredentials());
+            }
         }
         else {
             LOG_FATAL << "Not able to authn/authz client. Disconnecting "
                          "client. Invalid response values from auth gate "
                          "service, isAllowed: "
-                      << static_cast<int>(isAllowed) << ", reason: " << reason;
-            disconnect(true);
+                      << static_cast<int>(authResponseData.getAuthResult())
+                      << ", reason: " << authResponseData.getReason();
+            disconnectUnauthClientGracefully();
             return;
         }
     };
-    auto                                ret = d_connector.getCredentials();
-    std::pair<std::string, std::string> credentials;
-    if (!ret) {
-        credentials = std::make_pair("", "");
-    }
-    else {
-        credentials = ret.value();
-    }
-    std::string requestData =
-        "{\"vhost\": " + d_sessionState.getVirtualHost() +
-        ", \"user\": " + credentials.first +
-        ", \"pass\": " + credentials.second + "}";
-    d_authIntercept->sendRequest(requestData, authResponseCb);
+    const std::pair<std::string_view, std::string_view> credentials =
+        d_connector.getAuthMechanismCredentials();
+
+    d_authIntercept->sendRequest(
+        AuthRequestData(d_sessionState.getVirtualHost(),
+                        credentials.first,
+                        credentials.second),
+        authResponseCb);
     attemptConnection(connectionManager);
 }
 
@@ -462,6 +469,12 @@ void Session::pause()
     if (!d_sessionState.getPaused()) {
         d_sessionState.setPaused(true);
     }
+}
+
+void Session::disconnectUnauthClientGracefully()
+{
+    d_connector.synthesizeCloseAuthError(true);
+    sendSyntheticData();
 }
 
 void Session::disconnect(bool forcible)

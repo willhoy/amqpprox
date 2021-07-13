@@ -55,6 +55,11 @@ struct OK {
     constexpr static const char *const TEXT = "OK";
 };
 
+struct CloseNoAuth {
+    constexpr static const uint16_t    CODE = Codes::not_allowed;
+    constexpr static const char *const TEXT = "ERROR: Not authorized";
+};
+
 struct CloseOkExpected {
     constexpr static const uint16_t    CODE = Codes::channel_error;
     constexpr static const char *const TEXT = "ERROR: Expected CloseOk reply";

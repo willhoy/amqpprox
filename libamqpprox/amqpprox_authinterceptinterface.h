@@ -16,6 +16,9 @@
 #ifndef BLOOMBERG_AMQPPROX_AUTHINTERCEPTINTERFACE
 #define BLOOMBERG_AMQPPROX_AUTHINTERCEPTINTERFACE
 
+#include <amqpprox_authrequestdata.h>
+#include <amqpprox_authresponsedata.h>
+
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -28,7 +31,7 @@ namespace Bloomberg {
 namespace amqpprox {
 
 /**
- * \brief Provide a virtual interface for authn/authz operations
+ * \brief Provide a pure virtual interface for authn/authz operations
  */
 class AuthInterceptInterface {
   protected:
@@ -36,11 +39,11 @@ class AuthInterceptInterface {
     mutable std::mutex       d_mutex;
 
   public:
-    enum class Auth { ALLOW, DENY };
-
-    typedef std::function<void(const Auth &       isAllowed,
-                               const std::string &reason)>
-        ReceiveResponseCb;
+    /**
+     * \brief Callback function to return response allow/deny with reason after
+     * authenticating client connection.
+     */
+    typedef std::function<void(const AuthResponseData &)> ReceiveResponseCb;
 
     // CREATORS
     explicit AuthInterceptInterface(boost::asio::io_service &ioService);
@@ -48,12 +51,22 @@ class AuthInterceptInterface {
     virtual ~AuthInterceptInterface() = default;
 
     // MANIPULATORS
-    virtual void sendRequest(const std::string        requestBody,
+    /**
+     * \brief It gets all the information required to authenticate from client
+     * in requestBody parameter and invoke callback function to provide
+     * response.
+     * \param requestBody request data payload
+     * \param responseCb Callbak function with response values
+     */
+    virtual void sendRequest(const AuthRequestData    authRequestData,
                              const ReceiveResponseCb &responseCb) = 0;
 
     // ACCESSORS
+    /**
+     * \brief Print information about route auth gate service
+     * \param os output stream object
+     */
     virtual void print(std::ostream &os) const = 0;
-    ///< Print information about route auth gate service
 };
 
 }

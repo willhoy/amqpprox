@@ -17,6 +17,8 @@
 #include <amqpprox_defaultauthintercept.h>
 
 #include <amqpprox_authinterceptinterface.h>
+#include <amqpprox_authrequestdata.h>
+#include <amqpprox_authresponsedata.h>
 
 #include <functional>
 #include <mutex>
@@ -33,11 +35,13 @@ DefaultAuthIntercept::DefaultAuthIntercept(boost::asio::io_service &ioService)
 {
 }
 
-void DefaultAuthIntercept::sendRequest(const std::string,
+void DefaultAuthIntercept::sendRequest(const AuthRequestData,
                                        const ReceiveResponseCb &responseCb)
 {
     auto cb = [responseCb] {
-        responseCb(Auth::ALLOW, "Default auth gate service");
+        AuthResponseData authResponseData(AuthResponseData::AuthResult::ALLOW,
+                                          "Default auth gate service");
+        responseCb(authResponseData);
     };
     boost::asio::post(d_ioService, cb);
 }

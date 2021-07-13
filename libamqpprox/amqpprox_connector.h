@@ -31,7 +31,6 @@
 #include <amqpprox_methods_tuneok.h>
 
 #include <functional>
-#include <optional>
 #include <regex>
 #include <string_view>
 #include <utility>
@@ -100,8 +99,6 @@ class Connector {
     bool                  d_reconnection;
     std::string           d_localHostname;
 
-    static const std::regex s_credentialsRegex;
-
     template <typename T>
     void sendResponse(const T &response, bool sendToIngressSide);
 
@@ -163,6 +160,14 @@ class Connector {
     void synthesizeCloseError(bool sendToIngressSide);
 
     /**
+     * \brief Send AMQP connection Close method with ERROR status to
+     * client/server based on specified direction
+     * \param sendToIngressSide true for communicating with client and false
+     * for communicating with server
+     */
+    void synthesizeCloseAuthError(bool sendToIngressSide);
+
+    /**
      * \brief Synthesize AMQP protocol header buffer, which will eventually be
      * sent to server(broker).
      */
@@ -185,14 +190,23 @@ class Connector {
     bool sendToIngressSide();
 
     /**
-     * \brief AMQP client sends credential information using START-OK method.
-     * The method extracts the credential information from that method fields.
-     * So in case of absence or not abl to retrieve, it returns empty
-     * credentials.
-     * \return pair of (username, password)
+     * \brief AMQP client sends auth mechansim and credential information using
+     * START-OK method. The method extracts mechanism and credential
+     * information from that method fields.
+     * \return pair of AMQP authentication mechanism, AMQP response field
      */
-    const std::optional<std::pair<std::string, std::string>>
-    getCredentials() const;
+    const std::pair<std::string_view, std::string_view>
+    getAuthMechanismCredentials() const;
+
+    /**
+     * \brief Set different authentication mechanism and credentials for AMQP
+     * START-OK method, which will be sent to server for authentication and
+     * authorisation
+     * \param authMechanism of AMQP authentication mechanism
+     * \param credentials data for AMQP response field
+     */
+    void setAuthMechanismCredentials(std::string_view authMechanism,
+                                     std::string_view credentials) const;
 };
 
 inline Connector::State Connector::state() const

@@ -62,6 +62,24 @@ class StartOk {
     constexpr inline static int classType() { return 10; }
 
     constexpr inline static int methodType() { return 11; }
+
+    /**
+     * \brief Set specified AMQP authMechanism
+     * \param authMechanism AMQP authorization mechanism
+     */
+    void setAuthMechanism(std::string_view authMechanism)
+    {
+        d_mechanism = authMechanism;
+    }
+
+    /**
+     * \brief Set specified AMQP response credentials
+     * \param credentials AMQP opaque credential data
+     */
+    void setCredentials(std::string_view credentials)
+    {
+        d_response = credentials;
+    }
 };
 
 std::ostream &operator<<(std::ostream &os, const StartOk &okMethod);

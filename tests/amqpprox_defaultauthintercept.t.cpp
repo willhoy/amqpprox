@@ -16,6 +16,9 @@
 
 #include <amqpprox_defaultauthintercept.h>
 
+#include <amqpprox_authrequestdata.h>
+#include <amqpprox_authresponsedata.h>
+
 #include <gmock/gmock.h>
 
 #include <iostream>
@@ -24,6 +27,8 @@
 #include <boost/system/error_code.hpp>
 
 using Bloomberg::amqpprox::AuthInterceptInterface;
+using Bloomberg::amqpprox::AuthRequestData;
+using Bloomberg::amqpprox::AuthResponseData;
 using Bloomberg::amqpprox::DefaultAuthIntercept;
 
 TEST(DefaultAuthIntercept, Breathing)
@@ -37,13 +42,12 @@ TEST(DefaultAuthIntercept, SendRequest)
 {
     boost::asio::io_service ioService;
     DefaultAuthIntercept    defaultAuth(ioService);
-    const std::string       requestBody = "{\"vhost\":\"test-vhost\"}";
-    auto responseCb = [](const AuthInterceptInterface::Auth &isAllowed,
-                         const std::string &                 reason) {
-        ASSERT_EQ(isAllowed, AuthInterceptInterface::Auth::ALLOW);
-        ASSERT_EQ(reason, "Default auth gate service");
+    auto responseCb = [](const AuthResponseData &authResponseData) {
+        ASSERT_EQ(authResponseData.getAuthResult(),
+                  AuthResponseData::AuthResult::ALLOW);
+        ASSERT_EQ(authResponseData.getReason(), "Default auth gate service");
     };
-    defaultAuth.sendRequest(requestBody, responseCb);
+    defaultAuth.sendRequest(AuthRequestData(), responseCb);
     ioService.run();
 }
 

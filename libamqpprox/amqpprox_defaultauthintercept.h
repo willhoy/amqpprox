@@ -17,6 +17,7 @@
 #define BLOOMBERG_AMQPPROX_DEFAULTAUTHINTERCEPT
 
 #include <amqpprox_authinterceptinterface.h>
+#include <amqpprox_authrequestdata.h>
 
 #include <functional>
 #include <iostream>
@@ -27,6 +28,10 @@
 namespace Bloomberg {
 namespace amqpprox {
 
+/**
+ * \brief Performs authn/authz operations for incoming clients, implements the
+ * AuthInterceptInterface interface
+ */
 class DefaultAuthIntercept : public AuthInterceptInterface {
   public:
     // CREATORS
@@ -35,12 +40,22 @@ class DefaultAuthIntercept : public AuthInterceptInterface {
     virtual ~DefaultAuthIntercept() override = default;
 
     // MANIPULATORS
-    virtual void sendRequest(const std::string        requestBody,
+    /**
+     * \brief It gets all the information required to authenticate from client
+     * in requestBody parameter and invoke callback function to provide
+     * response.
+     * \param requestBody request data payload
+     * \param responseCb Callbak function with response values
+     */
+    virtual void sendRequest(const AuthRequestData    authRequestData,
                              const ReceiveResponseCb &responseCb) override;
 
     // ACCESSORS
+    /**
+     * \brief Print information about route auth gate service
+     * \param os output stream object
+     */
     virtual void print(std::ostream &os) const override;
-    ///< Print information about route auth gate service
 };
 
 }
