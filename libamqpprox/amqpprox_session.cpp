@@ -474,6 +474,7 @@ void Session::disconnectUnauthClientGracefully()
 {
     d_connector.synthesizeCloseAuthError(true);
     sendSyntheticData();
+    disconnect(true);
 }
 
 void Session::disconnect(bool forcible)

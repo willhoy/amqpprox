@@ -199,7 +199,7 @@ class Connector {
     /**
      * \brief Set different authentication mechanism and credentials for AMQP
      * START-OK method, which will be sent to server for authentication and
-     * authorisation
+     * authorization
      * \param authMechanism of AMQP authentication mechanism
      * \param credentials data for AMQP response field
      */

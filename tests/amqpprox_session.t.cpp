@@ -39,6 +39,7 @@
 #define SOCKET_TESTING 1
 
 #include <amqpprox_authinterceptinterface.h>
+#include <amqpprox_authrequestdata.h>
 #include <amqpprox_backendset.h>
 #include <amqpprox_bufferpool.h>
 #include <amqpprox_connectionmanager.h>
@@ -102,6 +103,20 @@ struct HostnameMapperMock : public HostnameMapper {
                        std::string(const boost::asio::ip::tcp::endpoint &));
 };
 
+struct AuthInterceptInterfaceMock : public AuthInterceptInterface {
+    virtual ~AuthInterceptInterfaceMock() {}
+
+    AuthInterceptInterfaceMock(boost::asio::io_service &ioService)
+    : AuthInterceptInterface(ioService)
+    {
+    }
+
+    MOCK_CONST_METHOD1(print, void(std::ostream &));
+    MOCK_METHOD2(sendRequest,
+                 void(const AuthRequestData,
+                      const AuthInterceptInterface::ReceiveResponseCb &));
+};
+
 boost::asio::ip::tcp::endpoint makeEndpoint(const std::string &str,
                                             uint16_t           port)
 {
@@ -111,26 +126,26 @@ boost::asio::ip::tcp::endpoint makeEndpoint(const std::string &str,
 
 class SessionTest : public ::testing::Test {
   protected:
-    boost::asio::io_service                 d_ioService;
-    BufferPool                              d_pool;
-    Backend                                 d_backend1;
-    Backend                                 d_backend2;
-    Backend                                 d_backend3;
-    std::shared_ptr<HostnameMapperMock>     d_mapper;
-    DNSResolver                             d_dnsResolver;
-    SelectorMock                            d_selector;
-    RobinBackendSelector                    d_robinSelector;
-    std::shared_ptr<ConnectionManager>      d_cm;
-    EventSource                             d_eventSource;
-    TestSocketState                         d_clientState;
-    TestSocketState                         d_serverState;
-    SocketInterceptTestAdaptor              d_clientSocketAdaptor;
-    SocketInterceptTestAdaptor              d_serverSocketAdaptor;
-    SocketIntercept                         d_client;
-    SocketIntercept                         d_server;
-    std::vector<uint8_t>                    d_protocolHeader;
-    int                                     d_step;
-    std::shared_ptr<AuthInterceptInterface> d_authIntercept;
+    boost::asio::io_service                     d_ioService;
+    BufferPool                                  d_pool;
+    Backend                                     d_backend1;
+    Backend                                     d_backend2;
+    Backend                                     d_backend3;
+    std::shared_ptr<HostnameMapperMock>         d_mapper;
+    DNSResolver                                 d_dnsResolver;
+    SelectorMock                                d_selector;
+    RobinBackendSelector                        d_robinSelector;
+    std::shared_ptr<ConnectionManager>          d_cm;
+    EventSource                                 d_eventSource;
+    TestSocketState                             d_clientState;
+    TestSocketState                             d_serverState;
+    SocketInterceptTestAdaptor                  d_clientSocketAdaptor;
+    SocketInterceptTestAdaptor                  d_serverSocketAdaptor;
+    SocketIntercept                             d_client;
+    SocketIntercept                             d_server;
+    std::vector<uint8_t>                        d_protocolHeader;
+    int                                         d_step;
+    std::shared_ptr<AuthInterceptInterfaceMock> d_authIntercept;
 
     SessionTest();
 
@@ -160,15 +175,18 @@ class SessionTest : public ::testing::Test {
     void testSetupClientSendsProtocolHeader(int idx);
     void testSetupClientStartOk(int idx);
     void testSetupClientOpen(int idx);
+    void testSetupClientOpenWithShutdown(int idx);
     void testSetupClientOpenWithoutTune(int idx);
     void testSetupProxyConnect(int idx, TestSocketState::State *clientBase);
     void testSetupProxySendsProtocolHeader(int idx);
-    void testSetupProxySendsStartOk(int                idx,
-                                    const std::string &injectedClientHost,
-                                    int                injectedClientPort,
-                                    std::string_view   injectedProxyHost,
-                                    int injectedProxyInboundPort,
-                                    int injectedProxyOutbountPort);
+    void testSetupProxySendsStartOk(
+        int                     idx,
+        const std::string &     injectedClientHost,
+        int                     injectedClientPort,
+        std::string_view        injectedProxyHost,
+        int                     injectedProxyInboundPort,
+        int                     injectedProxyOutbountPort,
+        const methods::StartOk &overriddenStartOk = methods::StartOk());
     void testSetupProxyOpen(int idx);
     void testSetupProxyOutOfOrderOpen(int idx);
     void testSetupProxyPassOpenOkThrough(int idx);
@@ -228,6 +246,17 @@ void SessionTest::testSetupClientOpen(int idx)
     });
 }
 
+void SessionTest::testSetupClientOpenWithShutdown(int idx)
+{
+    // Client  ------TuneOk------>  Proxy                         Broker
+    // Client  ------Open-------->  Proxy                         Broker
+    d_serverState.pushItem(idx, Data(encode(clientTuneOk())));
+    d_serverState.pushItem(idx, Data(encode(clientOpen())));
+    d_clientState.expect(idx, [this](const auto &items) {
+        EXPECT_THAT(items, Contains(VariantWith<Call>(Call("shutdown"))));
+    });
+}
+
 void SessionTest::testSetupClientOpenWithoutTune(int idx)
 {
     // Client  ------Open-------->  Proxy                         Broker
@@ -262,12 +291,13 @@ void SessionTest::testSetupProxySendsProtocolHeader(int idx)
 }
 
 void SessionTest::testSetupProxySendsStartOk(
-    int                idx,
-    const std::string &injectedClientHost,
-    int                injectedClientPort,
-    std::string_view   injectedProxyHost,
-    int                injectedProxyInboundPort,
-    int                injectedProxyOutboundPort)
+    int                     idx,
+    const std::string &     injectedClientHost,
+    int                     injectedClientPort,
+    std::string_view        injectedProxyHost,
+    int                     injectedProxyInboundPort,
+    int                     injectedProxyOutboundPort,
+    const methods::StartOk &overriddenStartOk)
 {
     // Client                       Proxy  <-------Start--------  Broker
     // Client                       Proxy  --------StartOk----->  Broker
@@ -278,11 +308,12 @@ void SessionTest::testSetupProxySendsStartOk(
                           injectedClientPort,
                           injectedProxyHost,
                           injectedProxyInboundPort,
-                          injectedProxyOutboundPort](const auto &items) {
+                          injectedProxyOutboundPort,
+                          overriddenStartOk](const auto &items) {
                              auto data = filterVariant<Data>(items);
                              ASSERT_EQ(data.size(), 1);
 
-                             auto startOk = clientStartOk();
+                             auto startOk = overriddenStartOk;
                              ConnectorUtil::injectProxyClientIdent(
                                  &startOk,
                                  injectedClientHost,
@@ -1234,6 +1265,146 @@ TEST_F(SessionTest, Connection_Then_Ping_Then_Backend_Disconnect)
     driveTo(13);
 }
 
+TEST_F(SessionTest, Authorized_Client_Test)
+{
+    EXPECT_CALL(d_selector, acquireConnection(_, _))
+        .WillOnce(DoAll(SetArgPointee<0>(d_cm), Return(0)));
+
+    std::string      modifiedMechanism   = "TEST_MECHANISM";
+    std::string      modifiedCredentials = "credentials";
+    AuthResponseData authResponseData(AuthResponseData::AuthResult::ALLOW,
+                                      "Authorized test client",
+                                      modifiedMechanism,
+                                      modifiedCredentials);
+    EXPECT_CALL(*d_authIntercept, sendRequest(_, _))
+        .WillOnce(InvokeArgument<1>(authResponseData));
+
+    EXPECT_CALL(*d_mapper, prime(_, _)).Times(AtLeast(1));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("2.3.4.5", 2345)))
+        .WillRepeatedly(Return(std::string("host1")));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("1.2.3.4", 1234)))
+        .WillRepeatedly(Return(std::string("host0")));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("1.2.3.4", 32000)))
+        .WillRepeatedly(Return(std::string("host0")));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("3.4.5.6", 5672)))
+        .WillRepeatedly(Return(std::string("host2")));
+
+    TestSocketState::State base;
+    base.d_local  = makeEndpoint("1.2.3.4", 1234);
+    base.d_remote = makeEndpoint("2.3.4.5", 2345);
+    base.d_secure = false;
+
+    TestSocketState::State clientBase;
+    clientBase.d_local  = makeEndpoint("1.2.3.4", 32000);
+    clientBase.d_remote = makeEndpoint("3.4.5.6", 5672);
+    clientBase.d_secure = false;
+
+    // Initialise the state
+    d_serverState.pushItem(0, base);
+    driveTo(0);
+
+    testSetupServerHandshake(1);
+    testSetupClientSendsProtocolHeader(2);
+    testSetupClientStartOk(3);
+    testSetupClientOpen(4);
+    testSetupProxyConnect(5, &clientBase);
+    testSetupProxySendsProtocolHeader(6);
+    methods::StartOk overriddenStartOk = clientStartOk();
+    overriddenStartOk.setAuthMechanism(modifiedMechanism);
+    overriddenStartOk.setCredentials(modifiedCredentials);
+    testSetupProxySendsStartOk(
+        7, "host1", 2345, LOCAL_HOSTNAME, 1234, 32000, overriddenStartOk);
+    testSetupProxyOpen(8);
+    testSetupProxyPassOpenOkThrough(9);
+    testSetupBrokerSendsHeartbeat(10);
+    testSetupClientSendsHeartbeat(11);
+    testSetupProxySendsCloseToClient(12);
+    testSetupClientSendsCloseOk(13);
+    testSetupBrokerRespondsCloseOk(14);
+    testSetupHandlersCleanedUp(15);
+
+    MaybeSecureSocketAdaptor clientSocket(d_ioService, d_client, false);
+    MaybeSecureSocketAdaptor serverSocket(d_ioService, d_server, false);
+    auto                     session = std::make_shared<Session>(d_ioService,
+                                             std::move(serverSocket),
+                                             std::move(clientSocket),
+                                             &d_selector,
+                                             &d_eventSource,
+                                             &d_pool,
+                                             &d_dnsResolver,
+                                             d_mapper,
+                                             LOCAL_HOSTNAME,
+                                             d_authIntercept);
+
+    session->start();
+
+    // Graceful disconnect after the heartbeats
+    d_serverState.pushItem(12,
+                           Func([&session] { session->disconnect(false); }));
+
+    // Lastly, check it's elligible to be deleted
+    d_serverState.pushItem(
+        17, Func([&session] {
+            EXPECT_TRUE(session->finished());
+            EXPECT_EQ(session->state().getDisconnectType(),
+                      SessionState::DisconnectType::DISCONNECTED_CLEANLY);
+        }));
+
+    // Run the tests through to completion
+    driveTo(17);
+}
+
+TEST_F(SessionTest, Unauthorized_Client_Test)
+{
+    EXPECT_CALL(d_selector, acquireConnection(_, _))
+        .WillOnce(DoAll(SetArgPointee<0>(d_cm), Return(0)));
+
+    AuthResponseData authResponseData(AuthResponseData::AuthResult::DENY,
+                                      "Unauthorized test client");
+    EXPECT_CALL(*d_authIntercept, sendRequest(_, _))
+        .WillOnce(InvokeArgument<1>(authResponseData));
+
+    EXPECT_CALL(*d_mapper, prime(_, _)).Times(AtLeast(1));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("2.3.4.5", 2345)))
+        .WillRepeatedly(Return(std::string("host1")));
+    EXPECT_CALL(*d_mapper, mapToHostname(makeEndpoint("0.0.0.0", 0)))
+        .WillRepeatedly(Return(std::string("host0")));
+
+    TestSocketState::State base;
+    base.d_local  = makeEndpoint("1.2.3.4", 1234);
+    base.d_remote = makeEndpoint("2.3.4.5", 2345);
+    base.d_secure = false;
+
+    // Initialise the state
+    d_serverState.pushItem(0, base);
+    driveTo(0);
+
+    testSetupServerHandshake(1);
+    testSetupClientSendsProtocolHeader(2);
+    testSetupClientStartOk(3);
+    testSetupClientOpenWithShutdown(4);
+
+    MaybeSecureSocketAdaptor clientSocket(d_ioService, d_client, false);
+    MaybeSecureSocketAdaptor serverSocket(d_ioService, d_server, false);
+    auto                     session = std::make_shared<Session>(d_ioService,
+                                             std::move(serverSocket),
+                                             std::move(clientSocket),
+                                             &d_selector,
+                                             &d_eventSource,
+                                             &d_pool,
+                                             &d_dnsResolver,
+                                             d_mapper,
+                                             LOCAL_HOSTNAME,
+                                             d_authIntercept);
+
+    session->start();
+
+    // Run the tests through to completion
+    driveTo(5);
+
+    EXPECT_TRUE(session->finished());
+}
+
 TEST_F(SessionTest, Printing_Breathing_Test)
 {
     EXPECT_CALL(d_selector, acquireConnection(_, _))
@@ -1367,7 +1538,7 @@ SessionTest::SessionTest()
                    Constants::protocolHeader() +
                        Constants::protocolHeaderLength())
 , d_step(0)
-, d_authIntercept(std::make_shared<DefaultAuthIntercept>(d_ioService))
+, d_authIntercept(std::make_shared<AuthInterceptInterfaceMock>(d_ioService))
 {
     std::vector<BackendSet::Partition> partitions;
     partitions.push_back(
