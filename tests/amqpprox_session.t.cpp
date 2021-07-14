@@ -40,6 +40,7 @@
 
 #include <amqpprox_authinterceptinterface.h>
 #include <amqpprox_authrequestdata.h>
+#include <amqpprox_authresponsedata.h>
 #include <amqpprox_backendset.h>
 #include <amqpprox_bufferpool.h>
 #include <amqpprox_connectionmanager.h>
@@ -252,7 +253,17 @@ void SessionTest::testSetupClientOpenWithShutdown(int idx)
     // Client  ------Open-------->  Proxy                         Broker
     d_serverState.pushItem(idx, Data(encode(clientTuneOk())));
     d_serverState.pushItem(idx, Data(encode(clientOpen())));
+    methods::Close closeMethod = methods::Close();
+    closeMethod.setReply(Reply::CloseNoAuth::CODE, Reply::CloseNoAuth::TEXT);
+    d_serverState.expect(idx, [this, closeMethod](const auto &items) {
+        auto data = filterVariant<Data>(items);
+        ASSERT_EQ(data.size(), 1);
+        EXPECT_EQ(data[0], Data(encode(closeMethod)));
+    });
     d_clientState.expect(idx, [this](const auto &items) {
+        EXPECT_THAT(items, Contains(VariantWith<Call>(Call("shutdown"))));
+    });
+    d_serverState.expect(idx, [this](const auto &items) {
         EXPECT_THAT(items, Contains(VariantWith<Call>(Call("shutdown"))));
     });
 }
